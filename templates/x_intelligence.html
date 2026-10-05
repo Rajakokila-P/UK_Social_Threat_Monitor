@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>X Intelligence | UK Social Threat Intelligence Monitor</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f3f6fb;
+            color: #172033;
+        }
+
+        .topbar {
+            background: #081b33;
+            color: white;
+            padding: 18px 28px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .topbar h1 {
+            margin: 0;
+            font-size: 21px;
+        }
+
+        .topbar .subtitle {
+            margin-top: 5px;
+            color: #b9c9dd;
+            font-size: 13px;
+        }
+
+        .user-info {
+            text-align: right;
+            font-size: 13px;
+        }
+
+        .nav {
+            background: #102947;
+            padding: 11px 28px;
+        }
+
+        .nav a {
+            color: #d9e6f5;
+            text-decoration: none;
+            margin-right: 22px;
+            font-size: 14px;
+        }
+
+        .nav a:hover {
+            color: white;
+        }
+
+        .container {
+            max-width: 1250px;
+            margin: 28px auto;
+            padding: 0 22px;
+        }
+
+        .page-heading {
+            margin-bottom: 22px;
+        }
+
+        .page-heading h2 {
+            margin-bottom: 6px;
+            font-size: 27px;
+        }
+
+        .page-heading p {
+            margin: 0;
+            color: #667085;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #e1e7ef;
+            border-radius: 12px;
+            padding: 22px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.04);
+        }
+
+        .card h3 {
+            margin-top: 0;
+            margin-bottom: 16px;
+            font-size: 18px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 7px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 7px;
+            font-size: 15px;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: #2563eb;
+        }
+
+        button {
+            margin-top: 14px;
+            background: #1d4ed8;
+            color: white;
+            border: none;
+            border-radius: 7px;
+            padding: 11px 18px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1e40af;
+        }
+
+        button:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .status-box {
+            border-radius: 8px;
+            padding: 14px;
+            margin-top: 15px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .status-info {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1e3a8a;
+        }
+
+        .status-success {
+            background: #ecfdf3;
+            border: 1px solid #a7f3d0;
+            color: #166534;
+        }
+
+        .status-warning {
+            background: #fff7ed;
+            border: 1px solid #fed7aa;
+            color: #9a3412;
+        }
+
+        .profile-row {
+            margin-bottom: 12px;
+        }
+
+        .profile-label {
+            color: #667085;
+            font-size: 12px;
+            text-transform: uppercase;
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
+
+        .profile-value {
+            font-size: 15px;
+            word-break: break-word;
+        }
+
+        .placeholder {
+            color: #667085;
+            text-align: center;
+            padding: 30px 10px;
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .posts-container {
+            margin-top: 12px;
+        }
+
+        .post {
+            border: 1px solid #e2e8f0;
+            border-radius: 9px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        .post-text {
+            line-height: 1.55;
+        }
+
+        .post-meta {
+            color: #64748b;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        .evidence-note {
+            background: #f8fafc;
+            border-left: 4px solid #2563eb;
+            padding: 14px;
+            color: #475569;
+            line-height: 1.55;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        @media (max-width: 800px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .full-width {
+                grid-column: auto;
+            }
+
+            .topbar {
+                align-items: flex-start;
+                gap: 15px;
+                flex-direction: column;
+            }
+
+            .user-info {
+                text-align: left;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<header class="topbar">
+    <div>
+        <h1>UK Social Threat Intelligence Monitor</h1>
+        <div class="subtitle">
+            X Intelligence · Public / Authorised OSINT
+        </div>
+    </div>
+
+    <div class="user-info">
+        {{ user.username }}<br>
+        {{ user.role }}
+    </div>
+</header>
+
+<nav class="nav">
+    <a href="/dashboard">Dashboard</a>
+    <a href="/social-evidence">Social Evidence</a>
+    <a href="/x-intelligence">X Intelligence</a>
+    <a href="/profile">Personal Details</a>
+    <a href="/settings">Settings</a>
+    <a href="/logout">Logout</a>
+</nav>
+
+<main class="container">
+
+    <div class="page-heading">
+        <h2>X Intelligence</h2>
+        <p>
+            Review permitted public X profile information before
+            deciding whether relevant material should be preserved
+            as Social Evidence.
+        </p>
+    </div>
+
+    <div class="grid">
+
+        <section class="card">
+            <h3>Public Account Lookup</h3>
+
+            <label for="username">
+                X username
+            </label>
+
+            <input
+                id="username"
+                type="text"
+                placeholder="Example: R2611K"
+                autocomplete="off"
+            >
+
+            <button
+                id="lookupButton"
+                type="button"
+                onclick="lookupXAccount()"
+            >
+                Check X Account
+            </button>
+
+            <div
+                id="apiStatus"
+                class="status-box status-info"
+            >
+                Enter a public X username to begin.
+            </div>
+        </section>
+
+
+        <section class="card">
+            <h3>Public Profile</h3>
+
+            <div
+                id="profilePlaceholder"
+                class="placeholder"
+            >
+                No profile has been loaded.
+            </div>
+
+            <div
+                id="profileContent"
+                class="hidden"
+            >
+                <div class="profile-row">
+                    <div class="profile-label">
+                        Name
+                    </div>
+                    <div
+                        id="profileName"
+                        class="profile-value"
+                    ></div>
+                </div>
+
+                <div class="profile-row">
+                    <div class="profile-label">
+                        Username
+                    </div>
+                    <div
+                        id="profileUsername"
+                        class="profile-value"
+                    ></div>
+                </div>
+
+                <div class="profile-row">
+                    <div class="profile-label">
+                        Description
+                    </div>
+                    <div
+                        id="profileDescription"
+                        class="profile-value"
+                    ></div>
+                </div>
+
+                <div class="profile-row">
+                    <div class="profile-label">
+                        Publicly disclosed location
+                    </div>
+                    <div
+                        id="profileLocation"
+                        class="profile-value"
+                    ></div>
+                </div>
+            </div>
+        </section>
+
+
+        <section class="card full-width">
+            <h3>Recent Public Posts</h3>
+
+            <div
+                id="postsPlaceholder"
+                class="placeholder"
+            >
+                Recent posts have not been requested.
+            </div>
+
+            <div
+                id="postsContainer"
+                class="posts-container hidden"
+            ></div>
+        </section>
+
+
+        <section class="card full-width">
+            <h3>Evidence Review</h3>
+
+            <div class="evidence-note">
+                X information displayed on this page is intelligence
+                material only. It should not automatically be treated
+                as verified evidence or as proof that a person presents
+                a threat. Relevant public material should be reviewed by
+                an authorised analyst before being preserved in the
+                Social Evidence register.
+            </div>
+        </section>
+
+    </div>
+
+</main>
+
+
+<script>
+    function safeText(value, fallback = "Not provided") {
+        if (
+            value === null ||
+            value === undefined ||
+            String(value).trim() === ""
+        ) {
+            return fallback;
+        }
+
+        return String(value);
+    }
+
+
+    async function lookupXAccount() {
+
+        const usernameInput =
+            document.getElementById("username");
+
+        const lookupButton =
+            document.getElementById("lookupButton");
+
+        const statusBox =
+            document.getElementById("apiStatus");
+
+        const profilePlaceholder =
+            document.getElementById("profilePlaceholder");
+
+        const profileContent =
+            document.getElementById("profileContent");
+
+        let username =
+            usernameInput.value.trim();
+
+        username =
+            username.replace(/^@/, "");
+
+        if (!username) {
+            statusBox.className =
+                "status-box status-warning";
+
+            statusBox.textContent =
+                "Please enter an X username.";
+
+            return;
+        }
+
+
+        lookupButton.disabled = true;
+
+        statusBox.className =
+            "status-box status-info";
+
+        statusBox.textContent =
+            "Checking X API...";
+
+        profileContent.classList.add("hidden");
+
+        profilePlaceholder.classList.remove("hidden");
+
+        profilePlaceholder.textContent =
+            "Waiting for X profile information...";
+
+
+        try {
+
+            const response = await fetch(
+                "/x-intelligence/" +
+                encodeURIComponent(username),
+                {
+                    method: "GET",
+                    credentials: "same-origin"
+                }
+            );
+
+
+            if (response.status === 401) {
+                window.location.href = "/login";
+                return;
+            }
+
+
+            const result = await response.json();
+
+
+            if (!response.ok) {
+
+                statusBox.className =
+                    "status-box status-warning";
+
+                statusBox.textContent =
+                    result.detail ||
+                    "The X lookup could not be completed.";
+
+                profilePlaceholder.textContent =
+                    "No profile information available.";
+
+                return;
+            }
+
+
+            if (!result.success) {
+
+                statusBox.className =
+                    "status-box status-warning";
+
+                statusBox.textContent =
+                    result.message ||
+                    "The X lookup could not be completed.";
+
+                profilePlaceholder.textContent =
+                    "No profile information available.";
+
+                return;
+            }
+
+
+            const profile =
+                result.profile || {};
+
+
+            statusBox.className =
+                "status-box status-success";
+
+            statusBox.textContent =
+                "X public profile retrieved successfully.";
+
+
+            document.getElementById(
+                "profileName"
+            ).textContent =
+                safeText(profile.name);
+
+
+            document.getElementById(
+                "profileUsername"
+            ).textContent =
+                "@" + safeText(
+                    profile.username,
+                    username
+                );
+
+
+            document.getElementById(
+                "profileDescription"
+            ).textContent =
+                safeText(profile.description);
+
+
+            document.getElementById(
+                "profileLocation"
+            ).textContent =
+                safeText(profile.location);
+
+
+            profilePlaceholder.classList.add(
+                "hidden"
+            );
+
+            profileContent.classList.remove(
+                "hidden"
+            );
+
+        }
+
+        catch (error) {
+
+            statusBox.className =
+                "status-box status-warning";
+
+            statusBox.textContent =
+                "Unable to contact the local X Intelligence service.";
+
+            profilePlaceholder.textContent =
+                "No profile information available.";
+
+        }
+
+        finally {
+
+            lookupButton.disabled = false;
+
+        }
+    }
+</script>
+
+</body>
+</html>

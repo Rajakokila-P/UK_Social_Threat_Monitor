@@ -1,0 +1,56 @@
+from typing import Optional, List
+
+from pydantic import BaseModel
+
+
+class SocialPost(BaseModel):
+    platform: str
+    username: str
+    display_name: Optional[str] = None
+    post_text: str
+    public_location: Optional[str] = None
+
+
+class ThreatResult(BaseModel):
+    platform: str
+    username: str
+    original_text: str
+    language: str
+    uk_relevant: bool
+    severity: str
+    detected_terms: List[str]
+    human_review_required: bool
+
+
+class CaseStatusUpdate(BaseModel):
+    case_status: str
+
+
+class AnalystNotesUpdate(BaseModel):
+    analyst_notes: str
+
+class SocialEvidenceCreate(BaseModel):
+    platform: str
+    source_url: Optional[str] = None
+    public_username: Optional[str] = None
+    public_profile_url: Optional[str] = None
+    post_text: Optional[str] = None
+    public_location: Optional[str] = None
+    observed_at: Optional[str] = None
+    evidence_type: str = "TEXT"
+    original_filename: Optional[str] = None
+    sha256_hash: Optional[str] = None
+    case_id: Optional[int] = None
+    status: str = "NEW"
+    analyst_notes: Optional[str] = None
+    analyse_text: bool = True
+    upload_filename: Optional[str] = None
+    upload_content_type: Optional[str] = None
+    upload_data_base64: Optional[str] = None
+
+class SocialEvidenceStatusUpdate(BaseModel):
+    status: str
+
+
+class SocialEvidenceNotesUpdate(BaseModel):
+    analyst_notes: str

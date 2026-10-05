@@ -1,0 +1,2122 @@
+import csv
+import io
+import os
+import secrets
+import sqlite3
+import traceback
+from urllib.parse import parse_qs
+
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Request,
+)
+
+from fastapi.responses import (
+    RedirectResponse,
+    StreamingResponse,
+)
+
+from fastapi.templating import Jinja2Templates
+
+from starlette.middleware.sessions import (
+    SessionMiddleware,
+)
+
+
+from app.models import (
+    SocialPost,
+    CaseStatusUpdate,
+    AnalystNotesUpdate,
+    SocialEvidenceCreate,
+    SocialEvidenceStatusUpdate,
+    SocialEvidenceNotesUpdate,
+)
+
+from app.threat_engine import (
+    analyse_threat,
+    calculate_risk_score,
+)
+
+from app.translator import (
+    translate_to_english,
+)
+
+from app.services.media_analysis import (
+    metadata_to_json,
+    save_base64_upload,
+)
+
+from app.services.x_api import (
+    get_user_by_username,
+    get_user_posts,
+    XAPIError,
+)
+
+from app.database import (
+    DATABASE_NAME,
+    hash_password,
+    create_database,
+    create_users_table,
+    create_audit_log_table,
+    create_status_history_table,
+    create_analyst_note_history_table,
+
+    add_translation_columns,
+    add_risk_columns,
+    add_case_status_column,
+    add_analyst_notes_column,
+
+    authenticate_user,
+    log_security_event,
+    get_user_profile,
+    update_user_profile,
+    reset_password_with_email,
+
+    save_analysis,
+    get_all_records,
+    get_priority_records,
+
+    update_case_status,
+    update_analyst_notes,
+
+    get_case_status_history,
+    get_analyst_note_history,
+
+    create_social_evidence_table,
+    create_evidence_audit_log_table,
+    create_social_evidence,
+    get_social_evidence,
+    get_all_social_evidence,
+    update_social_evidence_status,
+    update_social_evidence_notes,
+    get_deleted_social_evidence,
+    soft_delete_social_evidence,
+    restore_social_evidence,
+    log_evidence_audit_event,
+    get_evidence_audit_log,
+)
+
+
+# ---------------------------------------------------------
+# APPLICATION
+# ---------------------------------------------------------
+
+app = FastAPI(
+    title="UK Social Threat Intelligence Monitor",
+    description=(
+        "Prototype system for analysing authorised/public "
+        "social-media content for possible UK threat indicators."
+    ),
+    version="0.4.0",
+
+    # Disable public API documentation.
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
+
+
+templates = Jinja2Templates(
+    directory="templates"
+)
+
+
+# ---------------------------------------------------------
+# SESSION SECURITY
+# ---------------------------------------------------------
+
+SESSION_SECRET = os.getenv(
+    "SESSION_SECRET"
+)
+
+if not SESSION_SECRET:
+    SESSION_SECRET = secrets.token_urlsafe(
+        64
+    )
+
+
+COOKIE_SECURE = (
+    os.getenv(
+        "COOKIE_SECURE",
+        "false",
+    ).lower()
+    == "true"
+)
+
+
+app.add_middleware(
+    SessionMiddleware,
+
+    secret_key=SESSION_SECRET,
+
+    session_cookie=(
+        "threat_monitor_session"
+    ),
+
+    max_age=1800,
+
+    same_site="strict",
+
+    https_only=COOKIE_SECURE,
+)
+
+
+# ---------------------------------------------------------
+# AUTHENTICATION HELPERS
+# ---------------------------------------------------------
+
+def get_current_user(
+    request: Request,
+):
+    return request.session.get(
+        "user"
+    )
+
+
+def require_api_user(
+    request: Request,
+):
+    user = get_current_user(
+        request
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required",
+        )
+
+    return user
+
+
+def require_role(
+    user,
+    allowed_roles,
+):
+    if user["role"] not in allowed_roles:
+        raise HTTPException(
+            status_code=403,
+            detail="Permission denied",
+        )
+
+
+# ---------------------------------------------------------
+# STARTUP
+# ---------------------------------------------------------
+
+@app.on_event("startup")
+def startup_event():
+
+    create_database()
+
+    add_translation_columns()
+    add_risk_columns()
+    add_case_status_column()
+    add_analyst_notes_column()
+
+    create_status_history_table()
+    create_analyst_note_history_table()
+
+    create_users_table()
+    create_audit_log_table()
+
+    create_users_table()
+    create_audit_log_table()
+
+    create_social_evidence_table()
+    create_evidence_audit_log_table()
+
+
+# ---------------------------------------------------------
+# HOME
+# ---------------------------------------------------------
+
+@app.get("/")
+def home(
+    request: Request,
+):
+    user = get_current_user(
+        request
+    )
+
+    if not user:
+        return RedirectResponse(
+            url="/login",
+            status_code=303,
+        )
+
+    return RedirectResponse(
+        url="/dashboard",
+        status_code=303,
+    )
+
+
+# ---------------------------------------------------------
+# LOGIN PAGE
+# ---------------------------------------------------------
+
+@app.get("/login")
+def login_page(
+    request: Request,
+):
+    user = get_current_user(
+        request
+    )
+
+    if user:
+        return RedirectResponse(
+            url="/dashboard",
+            status_code=303,
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "login.html",
+        {
+            "error": None,
+        },
+    )
+
+
+# ---------------------------------------------------------
+# LOGIN
+# ---------------------------------------------------------
+
+@app.post("/login")
+async def login(
+    request: Request,
+):
+    body = await request.body()
+
+    form_data = parse_qs(
+        body.decode("utf-8")
+    )
+
+    username = (
+        form_data
+        .get("username", [""])[0]
+        .strip()
+    )
+
+    password = (
+        form_data
+        .get("password", [""])[0]
+    )
+
+    if not username or not password:
+
+        log_security_event(
+            username or "UNKNOWN",
+            "LOGIN_FAILED",
+            "Missing username or password",
+        )
+
+        return templates.TemplateResponse(
+            request,
+        "login.html",
+            {
+                "error":
+                    "Username and password are required.",
+            },
+            status_code=400,
+        )
+
+
+    user = authenticate_user(
+        username,
+        password,
+    )
+
+
+    if user is None:
+
+        log_security_event(
+            username,
+            "LOGIN_FAILED",
+            "Invalid login credentials",
+        )
+
+        return templates.TemplateResponse(
+            request,
+        "login.html",
+            {
+                "error":
+                    "Invalid username or password.",
+            },
+            status_code=401,
+        )
+
+
+    request.session.clear()
+
+    request.session["user"] = {
+        "id": user["id"],
+        "username":
+            user["username"],
+        "role":
+            user["role"],
+    }
+
+
+    log_security_event(
+        user["username"],
+        "LOGIN_SUCCESS",
+        (
+            "Authenticated as "
+            + user["role"]
+        ),
+    )
+
+
+    return RedirectResponse(
+        url="/dashboard",
+        status_code=303,
+    )
+
+
+# ---------------------------------------------------------
+# LOGOUT
+# ---------------------------------------------------------
+
+@app.get("/logout")
+def logout(
+    request: Request,
+):
+    user = get_current_user(
+        request
+    )
+
+    if user:
+        log_security_event(
+            user["username"],
+            "LOGOUT",
+            "User logged out",
+        )
+
+    request.session.clear()
+
+    return RedirectResponse(
+        url="/login",
+        status_code=303,
+    )
+
+
+# ---------------------------------------------------------
+# ANALYSE POST
+# ---------------------------------------------------------
+
+@app.post("/analyse")
+def analyse_post(
+    request: Request,
+    post: SocialPost,
+):
+
+    user = require_api_user(
+        request
+    )
+
+    require_role(
+        user,
+        {
+            "ADMIN",
+            "SENIOR_ANALYST",
+            "ANALYST",
+        },
+    )
+
+    try:
+        initial_analysis = (
+            analyse_threat(
+                post.post_text
+            )
+        )
+
+        translation = (
+            translate_to_english(
+                post.post_text,
+                initial_analysis[
+                    "language"
+                ],
+            )
+        )
+
+        analysis = analyse_threat(
+            translation[
+                "translated_text"
+            ]
+        )
+
+        risk = calculate_risk_score(
+            translation[
+                "translated_text"
+            ],
+            analysis[
+                "uk_relevant"
+            ],
+        )
+
+
+        save_analysis(
+            platform=
+                post.platform,
+
+            username=
+                post.username,
+
+            display_name=
+                post.display_name,
+
+            public_location=
+                post.public_location,
+
+            original_text=
+                post.post_text,
+
+            translated_text=
+                translation[
+                    "translated_text"
+                ],
+
+            translation_status=
+                translation[
+                    "translation_status"
+                ],
+
+            language=
+                initial_analysis[
+                    "language"
+                ],
+
+            uk_relevant=
+                analysis[
+                    "uk_relevant"
+                ],
+
+            severity=
+                analysis[
+                    "severity"
+                ],
+
+            risk_score=
+                risk[
+                    "risk_score"
+                ],
+
+            risk_level=
+                risk[
+                    "risk_level"
+                ],
+
+            risk_indicators=
+                risk[
+                    "risk_indicators"
+                ],
+
+            detected_terms=
+                analysis[
+                    "detected_terms"
+                ],
+
+            human_review_required=(
+                risk["risk_score"]
+                >= 25
+            ),
+        )
+
+
+        log_security_event(
+            user["username"],
+            "ANALYSIS_CREATED",
+            (
+                "Analysis saved for platform "
+                + post.platform
+            ),
+        )
+
+
+        return {
+            "platform":
+                post.platform,
+
+            "username":
+                post.username,
+
+            "display_name":
+                post.display_name,
+
+            "public_location":
+                post.public_location,
+
+            "original_text":
+                post.post_text,
+
+            "original_language":
+                initial_analysis[
+                    "language"
+                ],
+
+            "translated_text":
+                translation[
+                    "translated_text"
+                ],
+
+            "translation_status":
+                translation[
+                    "translation_status"
+                ],
+
+            "uk_relevant":
+                analysis[
+                    "uk_relevant"
+                ],
+
+            "severity":
+                analysis[
+                    "severity"
+                ],
+
+            "detected_terms":
+                analysis[
+                    "detected_terms"
+                ],
+
+            "risk_score":
+                risk[
+                    "risk_score"
+                ],
+
+            "risk_level":
+                risk[
+                    "risk_level"
+                ],
+
+            "risk_indicators":
+                risk[
+                    "risk_indicators"
+                ],
+
+            "human_review_required": (
+                risk["risk_score"]
+                >= 25
+            ),
+
+            "saved_to_database":
+                True,
+        }
+
+
+    except Exception as error:
+
+        traceback.print_exc()
+
+        return {
+            "success": False,
+            "error_type":
+                type(
+                    error
+                ).__name__,
+            "error":
+                str(error),
+        }
+
+
+# ---------------------------------------------------------
+# RECORDS API
+# ---------------------------------------------------------
+
+@app.get("/records")
+def records(
+    request: Request,
+):
+
+    require_api_user(
+        request
+    )
+
+    return {
+        "records":
+            get_all_records()
+    }
+
+
+# ---------------------------------------------------------
+# PRIORITY API
+# ---------------------------------------------------------
+
+@app.get("/priority")
+def priority_records(
+    request: Request,
+):
+
+    require_api_user(
+        request
+    )
+
+    records = (
+        get_priority_records()
+    )
+
+    return {
+        "priority_count":
+            len(records),
+
+        "records":
+            records,
+    }
+
+
+# ---------------------------------------------------------
+# CSV EXPORT
+# ---------------------------------------------------------
+
+@app.get("/export/cases.csv")
+def export_cases_csv(
+    request: Request,
+):
+
+    user = require_api_user(
+        request
+    )
+
+    require_role(
+        user,
+        {
+            "ADMIN",
+            "SENIOR_ANALYST",
+        },
+    )
+
+    try:
+        records = (
+            get_all_records()
+        )
+
+        output = io.StringIO()
+
+        fieldnames = [
+            "id",
+            "platform",
+            "username",
+            "display_name",
+            "public_location",
+            "original_text",
+            "translated_text",
+            "language",
+            "uk_relevant",
+            "severity",
+            "risk_score",
+            "risk_level",
+            "case_status",
+            "analyst_notes",
+            "created_at",
+        ]
+
+
+        writer = csv.DictWriter(
+            output,
+            fieldnames=
+                fieldnames,
+            extrasaction=
+                "ignore",
+        )
+
+
+        writer.writeheader()
+
+
+        for record in records:
+            writer.writerow(
+                record
+            )
+
+
+        csv_content = (
+            output.getvalue()
+        )
+
+        output.close()
+
+
+        log_security_event(
+            user["username"],
+            "CSV_EXPORTED",
+            (
+                "Exported "
+                + str(
+                    len(records)
+                )
+                + " cases"
+            ),
+        )
+
+
+        return StreamingResponse(
+            iter(
+                [csv_content]
+            ),
+
+            media_type=
+                "text/csv",
+
+            headers={
+                "Content-Disposition":
+                    "attachment; "
+                    "filename=threat_cases.csv"
+            },
+        )
+
+
+    except Exception as error:
+
+        traceback.print_exc()
+
+        return {
+            "success": False,
+
+            "error_type":
+                type(
+                    error
+                ).__name__,
+
+            "error":
+                str(error),
+        }
+
+
+# ---------------------------------------------------------
+# CHANGE CASE STATUS
+# ---------------------------------------------------------
+
+@app.patch(
+    "/records/{record_id}/status"
+)
+def change_case_status(
+    request: Request,
+    record_id: int,
+    update: CaseStatusUpdate,
+):
+
+    user = require_api_user(
+        request
+    )
+
+    require_role(
+        user,
+        {
+            "ADMIN",
+            "SENIOR_ANALYST",
+            "ANALYST",
+        },
+    )
+
+
+    result = update_case_status(
+        record_id,
+        update.case_status,
+    )
+
+
+    if result.get(
+        "success"
+    ):
+
+        log_security_event(
+            user["username"],
+            "CASE_STATUS_CHANGED",
+            (
+                "Case "
+                + str(record_id)
+                + " changed from "
+                + str(
+                    result.get(
+                        "old_status"
+                    )
+                )
+                + " to "
+                + str(
+                    result.get(
+                        "case_status"
+                    )
+                )
+            ),
+        )
+
+
+    return result
+
+
+# ---------------------------------------------------------
+# ANALYST NOTES
+# ---------------------------------------------------------
+
+@app.patch(
+    "/records/{record_id}/notes"
+)
+def change_analyst_notes(
+    request: Request,
+    record_id: int,
+    update: AnalystNotesUpdate,
+):
+
+    user = require_api_user(
+        request
+    )
+
+    require_role(
+        user,
+        {
+            "ADMIN",
+            "SENIOR_ANALYST",
+            "ANALYST",
+        },
+    )
+
+
+    result = update_analyst_notes(
+        record_id,
+        update.analyst_notes,
+    )
+
+
+    if result.get(
+        "success"
+    ):
+
+        log_security_event(
+            user["username"],
+            "ANALYST_NOTES_UPDATED",
+            (
+                "Analyst notes updated "
+                "for case "
+                + str(record_id)
+            ),
+        )
+
+
+    return result
+
+
+# ---------------------------------------------------------
+# DASHBOARD
+# ---------------------------------------------------------
+
+@app.get("/dashboard")
+def dashboard(
+    request: Request,
+):
+
+    user = get_current_user(
+        request
+    )
+
+    if not user:
+
+        return RedirectResponse(
+            url="/login",
+            status_code=303,
+        )
+
+
+    records = (
+        get_all_records()
+    )
+
+    priority_records = (
+        get_priority_records()
+    )
+
+
+    under_review = sum(
+        1
+        for record in records
+        if (
+            record[
+                "case_status"
+            ]
+            == "UNDER_REVIEW"
+        )
+    )
+
+
+    monitoring = sum(
+        1
+        for record in records
+        if (
+            record[
+                "case_status"
+            ]
+            == "MONITORING"
+        )
+    )
+
+
+    escalated = sum(
+        1
+        for record in records
+        if (
+            record[
+                "case_status"
+            ]
+            == "ESCALATED"
+        )
+    )
+
+
+    return templates.TemplateResponse(
+        request,
+        "dashboard.html",
+
+        {
+            "user":
+                user,
+
+            "total_cases":
+                len(records),
+
+            "priority_cases":
+                len(
+                    priority_records
+                ),
+
+            "under_review":
+                under_review,
+
+            "monitoring":
+                monitoring,
+
+            "escalated":
+                escalated,
+
+            "evidence_count":
+                len(get_all_social_evidence()),
+
+            "evidence_records":
+                get_all_social_evidence()[:20],
+
+            "deleted_evidence_records":
+                get_deleted_social_evidence()[:20],
+            "records":
+                records[:20],
+
+            "priority_records":
+                priority_records,
+        },
+    )
+
+
+
+# ---------------------------------------------------------
+# SOCIAL EVIDENCE API
+# ---------------------------------------------------------
+
+@app.get("/evidence")
+def evidence_records(
+    request: Request,
+):
+    require_api_user(
+        request
+    )
+
+    return {
+        "evidence":
+            get_all_social_evidence()
+    }
+
+
+@app.post("/evidence")
+def add_social_evidence(
+    request: Request,
+    evidence: SocialEvidenceCreate,
+):
+    user = require_api_user(
+        request
+    )
+
+    require_role(
+        user,
+        {
+            "ADMIN",
+            "SENIOR_ANALYST",
+            "ANALYST",
+        },
+    )
+
+    platform = evidence.platform.strip()
+    evidence_type = evidence.evidence_type.upper().strip()
+    status = evidence.status.upper().strip()
+
+    if not platform:
+        return {
+            "success": False,
+            "message": "Platform is required",
+        }
+
+    if not evidence_type:
+        return {
+            "success": False,
+            "message": "Evidence type is required",
+        }
+
+    if status not in {
+        "NEW",
+        "UNDER_REVIEW",
+        "VERIFIED",
+        "ESCALATED",
+        "CLOSED",
+        "REJECTED",
+    }:
+        return {
+            "success": False,
+            "message": "Invalid evidence status",
+        }
+
+    upload_result = None
+    media_metadata = None
+    extracted_location = None
+    face_summary = None
+    original_filename = evidence.original_filename
+    sha256_hash = evidence.sha256_hash
+
+    if evidence.upload_data_base64:
+        upload_result = save_base64_upload(
+            evidence.upload_filename,
+            evidence.upload_content_type,
+            evidence.upload_data_base64,
+        )
+        media_metadata = upload_result.get("metadata")
+        original_filename = (
+            upload_result.get("original_filename")
+            or original_filename
+        )
+        sha256_hash = upload_result.get("sha256_hash")
+
+        if media_metadata:
+            extracted_location = media_metadata.get("location")
+            face_summary = media_metadata.get("face_engine")
+
+    result = create_social_evidence(
+        platform=platform,
+        source_url=evidence.source_url,
+        public_username=evidence.public_username,
+        public_profile_url=evidence.public_profile_url,
+        post_text=evidence.post_text,
+        public_location=evidence.public_location,
+        observed_at=evidence.observed_at,
+        evidence_type=evidence_type,
+        original_filename=original_filename,
+        sha256_hash=sha256_hash,        case_id=evidence.case_id,
+        submitted_by=user["username"],
+        status=status,
+        analyst_notes=evidence.analyst_notes,
+        stored_filename=(
+            upload_result.get("stored_filename")
+            if upload_result else None
+        ),
+        stored_path=(
+            upload_result.get("stored_path")
+            if upload_result else None
+        ),
+        content_type=(
+            upload_result.get("content_type")
+            if upload_result else None
+        ),
+        file_size=(
+            upload_result.get("file_size")
+            if upload_result else None
+        ),
+        extracted_location=metadata_to_json(extracted_location),
+        media_metadata=metadata_to_json(media_metadata),
+        face_detection_summary=metadata_to_json(face_summary),
+    )
+
+    if result.get("success"):
+        log_evidence_audit_event(
+            result["evidence_id"],
+            user["username"],
+            "EVIDENCE_CREATED",
+            "Social evidence record created",
+        )
+
+        log_security_event(
+            user["username"],
+            "EVIDENCE_CREATED",
+            result["evidence_id"],
+        )
+
+    return result
+
+
+@app.get("/evidence/{evidence_id}")
+def evidence_detail(
+    request: Request,
+    evidence_id: str,
+):
+    require_api_user(
+        request
+    )
+
+    evidence = get_social_evidence(
+        evidence_id
+    )
+
+    if evidence is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Evidence not found",
+        )
+
+    return evidence
+
+
+@app.patch("/evidence/{evidence_id}/status")
+def change_evidence_status(
+    request: Request,
+    evidence_id: str,
+    update: SocialEvidenceStatusUpdate,
+):
+    user = require_api_user(
+        request
+    )
+
+    require_role(
+        user,
+        {
+            "ADMIN",
+            "SENIOR_ANALYST",
+            "ANALYST",
+        },
+    )
+
+    result = update_social_evidence_status(
+        evidence_id,
+        update.status,
+    )
+
+    if result.get("success"):
+        log_evidence_audit_event(
+            evidence_id,
+            user["username"],
+            "STATUS_CHANGED",
+            "Evidence status changed to " + result["status"],
+        )
+
+        log_security_event(
+            user["username"],
+            "EVIDENCE_STATUS_CHANGED",
+            evidence_id + " -> " + result["status"],
+        )
+
+    return result
+
+
+@app.patch("/evidence/{evidence_id}/notes")
+def change_evidence_notes(
+    request: Request,
+    evidence_id: str,
+    update: SocialEvidenceNotesUpdate,
+):
+    user = require_api_user(
+        request
+    )
+
+    require_role(
+        user,
+        {
+            "ADMIN",
+            "SENIOR_ANALYST",
+            "ANALYST",
+        },
+    )
+
+    result = update_social_evidence_notes(
+        evidence_id,
+        update.analyst_notes,
+    )
+
+    if result.get("success"):
+        log_evidence_audit_event(
+            evidence_id,
+            user["username"],
+            "NOTES_UPDATED",
+            "Evidence analyst notes updated",
+        )
+
+        log_security_event(
+            user["username"],
+            "EVIDENCE_NOTES_UPDATED",
+            evidence_id,
+        )
+
+    return result
+
+
+@app.get("/evidence/{evidence_id}/audit")
+def evidence_audit_log(
+    request: Request,
+    evidence_id: str,
+):
+    require_api_user(
+        request
+    )
+
+    return {
+        "audit_log":
+            get_evidence_audit_log(
+                evidence_id
+            )
+    }
+
+
+@app.get("/export/evidence.csv")
+def export_evidence_csv(
+    request: Request,
+):
+    user = require_api_user(
+        request
+    )
+
+    require_role(
+        user,
+        {
+            "ADMIN",
+            "SENIOR_ANALYST",
+        },
+    )
+
+    evidence_records = get_all_social_evidence()
+
+    output = io.StringIO()
+
+    fieldnames = [
+        "evidence_id",
+        "platform",
+        "source_url",
+        "public_username",
+        "public_profile_url",
+        "post_text",
+        "public_location",
+        "observed_at",
+        "evidence_type",
+        "original_filename",
+        "sha256_hash",
+        "case_id",
+        "submitted_by",
+        "status",
+        "analyst_notes",
+        "stored_filename",
+        "content_type",
+        "file_size",
+        "extracted_location",
+        "media_metadata",
+        "face_detection_summary",
+        "deleted_at",
+        "deleted_by",
+        "created_at",
+    ]
+
+    writer = csv.DictWriter(
+        output,
+        fieldnames=fieldnames,
+        extrasaction="ignore",
+    )
+
+    writer.writeheader()
+
+    for evidence in evidence_records:
+        writer.writerow(
+            evidence
+        )
+
+    csv_content = output.getvalue()
+    output.close()
+
+    log_security_event(
+        user["username"],
+        "EVIDENCE_CSV_EXPORTED",
+        "Exported " + str(len(evidence_records)) + " evidence records",
+    )
+
+    return StreamingResponse(
+        iter([csv_content]),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition":
+                "attachment; filename=social_evidence.csv"
+        },
+    )
+
+# ---------------------------------------------------------
+# PERSONAL DETAILS
+# ---------------------------------------------------------
+
+@app.get("/profile")
+def profile_page(
+    request: Request,
+):
+    user = get_current_user(
+        request
+    )
+
+    if not user:
+        return RedirectResponse(
+            url="/login",
+            status_code=303,
+        )
+
+    profile = get_user_profile(
+        user["id"]
+    )
+
+    if profile is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User profile not found",
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "profile.html",
+        {
+            "user": user,
+            "profile": profile,
+            "error": None,
+            "success": None,
+        },
+    )
+
+
+@app.post("/profile")
+async def update_profile_page(
+    request: Request,
+):
+    user = get_current_user(
+        request
+    )
+
+    if not user:
+        return RedirectResponse(
+            url="/login",
+            status_code=303,
+        )
+
+    body = await request.body()
+
+    form_data = parse_qs(
+        body.decode("utf-8")
+    )
+
+    first_name = (
+        form_data
+        .get("first_name", [""])[0]
+        .strip()
+    )
+
+    surname = (
+        form_data
+        .get("surname", [""])[0]
+        .strip()
+    )
+
+    id_number = (
+        form_data
+        .get("id_number", [""])[0]
+        .strip()
+    )
+
+    email = (
+        form_data
+        .get("email", [""])[0]
+        .strip()
+    )
+
+    phone_number = (
+        form_data
+        .get("phone_number", [""])[0]
+        .strip()
+    )
+
+    error = None
+
+    if not first_name or not surname:
+        error = (
+            "First name and surname are required."
+        )
+
+    elif email and (
+        "@" not in email
+        or "." not in email.split("@")[-1]
+    ):
+        error = (
+            "Please enter a valid email address."
+        )
+
+    if error:
+        profile = {
+            "id": user["id"],
+            "username": user["username"],
+            "role": user["role"],
+            "first_name": first_name,
+            "surname": surname,
+            "id_number": id_number,
+            "email": email,
+            "phone_number": phone_number,
+        }
+
+        return templates.TemplateResponse(
+            request,
+        "profile.html",
+            {
+                "user": user,
+                "profile": profile,
+                "error": error,
+                "success": None,
+            },
+            status_code=400,
+        )
+
+    result = update_user_profile(
+        user["id"],
+        first_name,
+        surname,
+        id_number,
+        email,
+        phone_number,
+    )
+
+    if not result.get("success"):
+        profile = get_user_profile(
+            user["id"]
+        )
+
+        return templates.TemplateResponse(
+            request,
+        "profile.html",
+            {
+                "user": user,
+                "profile": profile,
+                "error": result.get(
+                    "message",
+                    "Unable to update personal details.",
+                ),
+                "success": None,
+            },
+            status_code=400,
+        )
+
+    log_security_event(
+        user["username"],
+        "PROFILE_UPDATED",
+        "User updated personal details",
+    )
+
+    profile = get_user_profile(
+        user["id"]
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "profile.html",
+        {
+            "user": user,
+            "profile": profile,
+            "error": None,
+            "success":
+                "Personal details saved successfully.",
+        },
+    )
+
+
+
+
+# ---------------------------------------------------------
+# FORGOT PASSWORD / ACCOUNT RECOVERY
+# ---------------------------------------------------------
+
+@app.get("/forgot-password")
+def forgot_password_page(
+    request: Request,
+):
+    if get_current_user(request):
+        return RedirectResponse(
+            url="/dashboard",
+            status_code=303,
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "forgot_password.html",
+        {
+            "error": None,
+            "success": None,
+        },
+    )
+
+
+@app.post("/forgot-password")
+async def forgot_password_submit(
+    request: Request,
+):
+    if get_current_user(request):
+        return RedirectResponse(
+            url="/dashboard",
+            status_code=303,
+        )
+
+    body = await request.body()
+    form_data = parse_qs(
+        body.decode("utf-8")
+    )
+
+    username = (
+        form_data.get("username", [""])[0].strip()
+    )
+    email = (
+        form_data.get("email", [""])[0].strip()
+    )
+    new_password = form_data.get(
+        "new_password", [""]
+    )[0]
+    confirm_password = form_data.get(
+        "confirm_password", [""]
+    )[0]
+
+    if (
+        not username
+        or not email
+        or not new_password
+        or not confirm_password
+    ):
+        return templates.TemplateResponse(
+            request,
+        "forgot_password.html",
+            {
+                "error":
+                    "Please complete all recovery fields.",
+                "success": None,
+            },
+            status_code=400,
+        )
+
+    if len(new_password) < 12:
+        return templates.TemplateResponse(
+            request,
+        "forgot_password.html",
+            {
+                "error":
+                    "The new password must contain at least 12 characters.",
+                "success": None,
+            },
+            status_code=400,
+        )
+
+    if new_password != confirm_password:
+        return templates.TemplateResponse(
+            request,
+        "forgot_password.html",
+            {
+                "error":
+                    "The new passwords do not match.",
+                "success": None,
+            },
+            status_code=400,
+        )
+
+    result = reset_password_with_email(
+        username,
+        email,
+        new_password,
+    )
+
+    if not result.get("success"):
+        log_security_event(
+            username or "UNKNOWN",
+            "PASSWORD_RECOVERY_FAILED",
+            "Recovery details did not match",
+        )
+
+        return templates.TemplateResponse(
+            request,
+        "forgot_password.html",
+            {
+                "error":
+                    "Recovery could not be completed. Check the username and recovery email.",
+                "success": None,
+            },
+            status_code=400,
+        )
+
+    log_security_event(
+        result["username"],
+        "PASSWORD_RECOVERY_SUCCESS",
+        "Password reset using local recovery flow",
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "forgot_password.html",
+        {
+            "error": None,
+            "success":
+                "Password reset successfully. You can now sign in with your new password.",
+        },
+    )
+
+# ---------------------------------------------------------
+# SETTINGS
+# ---------------------------------------------------------
+
+@app.get("/settings")
+def settings_page(
+    request: Request,
+):
+    user = get_current_user(
+        request
+    )
+
+    if not user:
+        return RedirectResponse(
+            url="/login",
+            status_code=303,
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "settings.html",
+        {
+            "user": user,
+            "error": None,
+            "success": None,
+        },
+    )
+
+
+@app.post("/settings/password")
+async def change_password(
+    request: Request,
+):
+    user = get_current_user(
+        request
+    )
+
+    if not user:
+        return RedirectResponse(
+            url="/login",
+            status_code=303,
+        )
+
+    body = await request.body()
+
+    form_data = parse_qs(
+        body.decode("utf-8")
+    )
+
+    current_password = (
+        form_data
+        .get("current_password", [""])[0]
+    )
+
+    new_password = (
+        form_data
+        .get("new_password", [""])[0]
+    )
+
+    confirm_password = (
+        form_data
+        .get("confirm_password", [""])[0]
+    )
+
+    error = None
+
+    if (
+        not current_password
+        or not new_password
+        or not confirm_password
+    ):
+        error = (
+            "Please complete all password fields."
+        )
+
+    elif len(new_password) < 12:
+        error = (
+            "The new password must contain "
+            "at least 12 characters."
+        )
+
+    elif new_password != confirm_password:
+        error = (
+            "The new passwords do not match."
+        )
+
+    else:
+        authenticated_user = authenticate_user(
+            user["username"],
+            current_password,
+        )
+
+        if authenticated_user is None:
+            error = (
+                "The current password is incorrect."
+            )
+
+        else:
+            connection = sqlite3.connect(
+                DATABASE_NAME
+            )
+
+            try:
+                cursor = connection.cursor()
+
+                cursor.execute(
+                    """
+                    UPDATE users
+                    SET password_hash = ?
+                    WHERE username = ?
+                    """,
+                    (
+                        hash_password(
+                            new_password
+                        ),
+                        user["username"],
+                    ),
+                )
+
+                connection.commit()
+
+            finally:
+                connection.close()
+
+            log_security_event(
+                user["username"],
+                "PASSWORD_CHANGED",
+                "User changed account password",
+            )
+
+            return templates.TemplateResponse(
+                request,
+        "settings.html",
+                {
+                    "user": user,
+                    "error": None,
+                    "success": (
+                        "Password changed successfully."
+                    ),
+                },
+            )
+
+    return templates.TemplateResponse(
+        request,
+        "settings.html",
+        {
+            "user": user,
+            "error": error,
+            "success": None,
+        },
+        status_code=400,
+    )
+
+
+# ---------------------------------------------------------
+# CASE DETAILS
+# ---------------------------------------------------------
+
+@app.get("/cases/{record_id}")
+def case_detail(
+    request: Request,
+    record_id: int,
+):
+
+    user = get_current_user(
+        request
+    )
+
+    if not user:
+
+        return RedirectResponse(
+            url="/login",
+            status_code=303,
+        )
+
+
+    records = (
+        get_all_records()
+    )
+
+
+    record = next(
+        (
+            item
+            for item in records
+            if item["id"]
+            == record_id
+        ),
+        None,
+    )
+
+
+    if record is None:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Record not found",
+        )
+
+
+    status_history = (
+        get_case_status_history(
+            record_id
+        )
+    )
+
+
+    note_history = (
+        get_analyst_note_history(
+            record_id
+        )
+    )
+
+
+    return templates.TemplateResponse(
+        request,
+        "case_detail.html",
+
+        {
+            "user":
+                user,
+
+            "record":
+                record,
+
+            "status_history":
+                status_history,
+
+            "note_history":
+                note_history,
+        },
+    )
+
+
+    # ---------------------------------------------------------
+# SOCIAL EVIDENCE
+# -------------------------------------------------------------
+
+
+@app.get("/social-evidence/{evidence_id}")
+def social_evidence_detail(
+    evidence_id: str,
+    request: Request
+):
+    user = get_current_user(request)
+
+    if not user:
+        return RedirectResponse(
+            url="/login",
+            status_code=303
+        )
+
+    if user["role"] not in [
+        "ADMIN",
+        "SENIOR_ANALYST",
+        "ANALYST"
+    ]:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to view evidence."
+        )
+
+    evidence = get_social_evidence(evidence_id)
+
+    if not evidence:
+        raise HTTPException(
+            status_code=404,
+            detail="Evidence record not found."
+        )
+
+    audit_log = get_evidence_audit_log(evidence_id)
+
+    return templates.TemplateResponse(
+        "social_evidence_detail.html",
+        {
+            "request": request,
+            "user": user,
+            "evidence": evidence,
+            "audit_log": audit_log,
+        },
+    )
+
+@app.get("/social-evidence")
+def social_evidence_page(request: Request):
+    user = get_current_user(request)
+
+    if not user:
+        return RedirectResponse(
+            url="/login",
+            status_code=303
+        )
+
+    if user["role"] not in ["ADMIN", "SENIOR_ANALYST", "ANALYST"]:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to access Social Evidence."
+        )
+
+    return templates.TemplateResponse(
+        "social_evidence.html",
+        {
+            "request": request,
+            "user": user,
+            "evidence_records": get_all_social_evidence(),
+        },
+    )
+
+
+@app.post("/social-evidence")
+async def create_social_evidence_record(request: Request):
+    user = get_current_user(request)
+
+    if not user:
+        return RedirectResponse(
+            url="/login",
+            status_code=303
+        )
+
+    if user["role"] not in ["ADMIN", "SENIOR_ANALYST", "ANALYST"]:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to create evidence."
+        )
+
+    body = await request.body()
+
+    form_data = {
+        key: values[0]
+        for key, values in parse_qs(
+            body.decode("utf-8")
+        ).items()
+        if values
+    }
+
+    evidence_id = create_social_evidence(
+        platform=form_data.get("platform", "").strip(),
+        source_url=form_data.get("source_url", "").strip(),
+        public_username=form_data.get("public_username", "").strip(),
+        public_profile_url=form_data.get("public_profile_url", "").strip(),
+        post_text=form_data.get("post_text", "").strip(),
+        public_location=form_data.get("public_location", "").strip(),
+        observed_at=form_data.get("observed_at", "").strip(),
+        evidence_type=form_data.get("evidence_type", "").strip(),
+        original_filename=None,
+        sha256_hash=None,
+        case_id=form_data.get("case_id", "").strip(),
+        submitted_by=user["username"],
+        analyst_notes=form_data.get("analyst_notes", "").strip(),
+    )
+
+    log_evidence_audit_event(
+        evidence_id=evidence_id,
+        username=user["username"],
+        action="EVIDENCE_CREATED",
+        details="Social evidence record created.",
+    )
+
+    return RedirectResponse(
+        url=f"/social-evidence?created={evidence_id}",
+        status_code=303,
+    )
+
+
+# ---------------------------------------------------------
+# X INTELLIGENCE
+# ---------------------------------------------------------
+
+@app.get("/x-intelligence")
+def x_intelligence_page(
+    request: Request,
+):
+    user = get_current_user(request)
+
+    if not user:
+        return RedirectResponse(
+            url="/login",
+            status_code=303,
+        )
+
+    require_role(
+        user,
+        {
+            "ADMIN",
+            "SENIOR_ANALYST",
+            "ANALYST",
+        },
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "x_intelligence.html",
+        {
+            "user": user,
+        },
+    )
+
+
+@app.get("/x-intelligence/{username}")
+def x_intelligence_lookup(
+    username: str,
+    request: Request,
+):
+    user = require_api_user(request)
+
+    require_role(
+        user,
+        {
+            "ADMIN",
+            "SENIOR_ANALYST",
+            "ANALYST",
+        },
+    )
+
+    username = username.strip().lstrip("@")
+
+    if not username:
+        raise HTTPException(
+            status_code=400,
+            detail="An X username is required.",
+        )
+
+    try:
+        profile_result = get_user_by_username(username)
+
+        profile = profile_result.get("data")
+
+        if not profile:
+            return {
+                "success": False,
+                "platform": "X",
+                "username": username,
+                "message": "No public X profile data was returned.",
+                "profile": None,
+            }
+
+        log_security_event(
+            user["username"],
+            "X_PROFILE_LOOKUP",
+            "Public X profile lookup for @" + username,
+        )
+
+        return {
+            "success": True,
+            "platform": "X",
+            "username": username,
+            "profile": profile,
+        }
+
+    except XAPIError as error:
+        return {
+            "success": False,
+            "platform": "X",
+            "username": username,
+            "message": str(error),
+            "profile": None,
+        }
+    
+

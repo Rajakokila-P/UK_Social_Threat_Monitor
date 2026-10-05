@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Evidence Detail | UK Social Threat Intelligence Monitor</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f3f6fa;
+            color: #172033;
+        }
+
+        .header {
+            background: #082b55;
+            color: white;
+            padding: 18px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 21px;
+        }
+
+        .header p {
+            margin: 5px 0 0;
+            font-size: 13px;
+            opacity: 0.85;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .header-actions a {
+            color: white;
+            text-decoration: none;
+            border: 1px solid rgba(255,255,255,0.4);
+            padding: 9px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .header-actions a:hover {
+            background: rgba(255,255,255,0.12);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .page-title {
+            margin-bottom: 20px;
+        }
+
+        .page-title h2 {
+            margin: 0 0 6px;
+            color: #082b55;
+        }
+
+        .page-title p {
+            margin: 0;
+            color: #667085;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 22px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+            border: 1px solid #e2e8f0;
+        }
+
+        .card.full {
+            grid-column: 1 / -1;
+        }
+
+        .card h3 {
+            margin-top: 0;
+            margin-bottom: 18px;
+            color: #082b55;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 10px;
+        }
+
+        .field {
+            margin-bottom: 16px;
+        }
+
+        .label {
+            display: block;
+            font-size: 12px;
+            font-weight: bold;
+            color: #667085;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            margin-bottom: 5px;
+        }
+
+        .value {
+            font-size: 15px;
+            color: #172033;
+            word-break: break-word;
+        }
+
+        .value a {
+            color: #0756a3;
+            text-decoration: none;
+        }
+
+        .value a:hover {
+            text-decoration: underline;
+        }
+
+        .evidence-id {
+            font-family: Consolas, monospace;
+            background: #eef4fb;
+            padding: 8px 10px;
+            border-radius: 5px;
+            display: inline-block;
+            color: #082b55;
+            font-weight: bold;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            background: #e8eef7;
+            color: #082b55;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .text-box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 7px;
+            padding: 15px;
+            min-height: 80px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            line-height: 1.6;
+        }
+
+        .hash-box {
+            background: #111827;
+            color: #e5e7eb;
+            padding: 14px;
+            border-radius: 7px;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 12px;
+            word-break: break-all;
+        }
+
+        .audit-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .audit-table th,
+        .audit-table td {
+            padding: 11px 10px;
+            border-bottom: 1px solid #e5e7eb;
+            text-align: left;
+            vertical-align: top;
+            font-size: 13px;
+        }
+
+        .audit-table th {
+            background: #f8fafc;
+            color: #475467;
+        }
+
+        .empty {
+            color: #667085;
+            font-style: italic;
+            padding: 10px 0;
+        }
+
+        .back-button {
+            display: inline-block;
+            margin-bottom: 20px;
+            background: #082b55;
+            color: white;
+            text-decoration: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .back-button:hover {
+            background: #0b3d78;
+        }
+
+        @media (max-width: 800px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .card.full {
+                grid-column: auto;
+            }
+
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .audit-table {
+                display: block;
+                overflow-x: auto;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="header">
+
+    <div>
+        <h1>UK Social Threat Intelligence Monitor</h1>
+        <p>Evidence Detail &amp; Provenance</p>
+    </div>
+
+    <div class="header-actions">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/social-evidence">Social Evidence</a>
+        <a href="/logout">Logout</a>
+    </div>
+
+</div>
+
+
+<div class="container">
+
+    <a href="/social-evidence" class="back-button">
+        ← Back to Social Evidence
+    </a>
+
+
+    <div class="page-title">
+        <h2>Evidence Detail</h2>
+        <p>Review the recorded public-source evidence and its audit history.</p>
+    </div>
+
+
+    <div class="grid">
+
+        <!-- Evidence identification -->
+
+        <div class="card">
+
+            <h3>Evidence Identification</h3>
+
+            <div class="field">
+                <span class="label">Evidence ID</span>
+
+                <div class="value">
+                    <span class="evidence-id">
+                        {{ evidence["evidence_id"] }}
+                    </span>
+                </div>
+            </div>
+
+            <div class="field">
+                <span class="label">Platform</span>
+
+                <div class="value">
+                    {{ evidence["platform"] or "Not provided" }}
+                </div>
+            </div>
+
+            <div class="field">
+                <span class="label">Evidence Type</span>
+
+                <div class="value">
+                    {{ evidence["evidence_type"] or "Not provided" }}
+                </div>
+            </div>
+
+            <div class="field">
+                <span class="label">Current Status</span>
+
+                <div class="value">
+                    <span class="status">
+                        {{ evidence["status"] or "NEW" }}
+                    </span>
+                </div>
+            </div>
+
+        </div>
+
+
+        <!-- Source information -->
+
+        <div class="card">
+
+            <h3>Source Information</h3>
+
+            <div class="field">
+                <span class="label">Public Source URL</span>
+
+                <div class="value">
+
+                    {% if evidence["source_url"] %}
+
+                        <a href="{{ evidence['source_url'] }}"
+                           target="_blank"
+                           rel="noopener noreferrer">
+                            {{ evidence["source_url"] }}
+                        </a>
+
+                    {% else %}
+
+                        Not provided
+
+                    {% endif %}
+
+                </div>
+            </div>
+
+
+            <div class="field">
+                <span class="label">Public Username</span>
+
+                <div class="value">
+                    {{ evidence["public_username"] or "Not provided" }}
+                </div>
+            </div>
+
+
+            <div class="field">
+                <span class="label">Public Profile URL</span>
+
+                <div class="value">
+
+                    {% if evidence["public_profile_url"] %}
+
+                        <a href="{{ evidence['public_profile_url'] }}"
+                           target="_blank"
+                           rel="noopener noreferrer">
+                            {{ evidence["public_profile_url"] }}
+                        </a>
+
+                    {% else %}
+
+                        Not provided
+
+                    {% endif %}
+
+                </div>
+            </div>
+
+
+            <div class="field">
+                <span class="label">Publicly Disclosed Location</span>
+
+                <div class="value">
+                    {{ evidence["public_location"] or "Not provided" }}
+                </div>
+            </div>
+
+        </div>
+
+
+        <!-- Observation information -->
+
+        <div class="card">
+
+            <h3>Observation Information</h3>
+
+            <div class="field">
+                <span class="label">Observed At</span>
+
+                <div class="value">
+                    {{ evidence["observed_at"] or "Not provided" }}
+                </div>
+            </div>
+
+
+            <div class="field">
+                <span class="label">Case ID</span>
+
+                <div class="value">
+                    {{ evidence["case_id"] or "Not attached to a case" }}
+                </div>
+            </div>
+
+
+            <div class="field">
+                <span class="label">Submitted By</span>
+
+                <div class="value">
+                    {{ evidence["submitted_by"] or "Not provided" }}
+                </div>
+            </div>
+
+
+            <div class="field">
+                <span class="label">Created At</span>
+
+                <div class="value">
+                    {{ evidence["created_at"] or "Not provided" }}
+                </div>
+            </div>
+
+        </div>
+
+
+        <!-- File integrity -->
+
+        <div class="card">
+
+            <h3>Evidence Integrity</h3>
+
+            <div class="field">
+
+                <span class="label">Original Filename</span>
+
+                <div class="value">
+                    {{ evidence["original_filename"] or "No file attached" }}
+                </div>
+
+            </div>
+
+
+            <div class="field">
+
+                <span class="label">SHA-256 Evidence Hash</span>
+
+                {% if evidence["sha256_hash"] %}
+
+                    <div class="hash-box">
+                        {{ evidence["sha256_hash"] }}
+                    </div>
+
+                {% else %}
+
+                    <div class="empty">
+                        No SHA-256 hash has been recorded for this evidence.
+                    </div>
+
+                {% endif %}
+
+            </div>
+
+        </div>
+
+
+        <!-- Content -->
+
+        <div class="card full">
+
+            <h3>Recorded Content</h3>
+
+            <div class="field">
+
+                <span class="label">Post / Content Text</span>
+
+                <div class="text-box">
+                    {{ evidence["post_text"] or "No text content recorded." }}
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- Analyst notes -->
+
+        <div class="card full">
+
+            <h3>Analyst Notes</h3>
+
+            <div class="text-box">
+                {{ evidence["analyst_notes"] or "No analyst notes recorded." }}
+            </div>
+
+        </div>
+
+
+        <!-- Audit history -->
+
+        <div class="card full">
+
+            <h3>Evidence Audit History</h3>
+
+            {% if audit_log %}
+
+                <table class="audit-table">
+
+                    <thead>
+                        <tr>
+                            <th>Date / Time</th>
+                            <th>User</th>
+                            <th>Action</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+
+                    {% for event in audit_log %}
+
+                        <tr>
+
+                            <td>
+                                {{ event["created_at"] }}
+                            </td>
+
+                            <td>
+                                {{ event["username"] }}
+                            </td>
+
+                            <td>
+                                {{ event["action"] }}
+                            </td>
+
+                            <td>
+                                {{ event["details"] }}
+                            </td>
+
+                        </tr>
+
+                    {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            {% else %}
+
+                <div class="empty">
+                    No audit events have been recorded for this evidence.
+                </div>
+
+            {% endif %}
+
+        </div>
+
+    </div>
+
+</div>
+
+</body>
+</html>

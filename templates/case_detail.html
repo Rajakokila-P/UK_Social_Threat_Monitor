@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Case Details</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            background: #f4f6f8;
+            color: #1f2937;
+        }
+
+        header {
+            background: #111827;
+            color: white;
+            padding: 20px 30px;
+        }
+
+        header h1 {
+            margin: 0;
+        }
+
+        header p {
+            margin-top: 6px;
+            color: #d1d5db;
+        }
+
+        .container {
+            padding: 24px;
+            max-width: 1100px;
+            margin: auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .row {
+            margin-bottom: 12px;
+        }
+
+        .label {
+            font-weight: bold;
+            color: #374151;
+        }
+
+        .risk-high {
+            color: #c2410c;
+            font-weight: bold;
+        }
+
+        .risk-critical {
+            color: #b91c1c;
+            font-weight: bold;
+        }
+
+        .risk-medium {
+            color: #92400e;
+        }
+
+        .risk-low {
+            color: #166534;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            text-decoration: none;
+            color: #111827;
+            font-weight: bold;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 10px;
+            border-bottom: 1px solid #e5e7eb;
+            vertical-align: top;
+        }
+
+        th {
+            background: #f9fafb;
+        }
+
+        select {
+            padding: 8px;
+            min-width: 180px;
+        }
+
+        textarea {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-family: Arial, sans-serif;
+        }
+
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            background: #111827;
+            color: white;
+        }
+
+        button:hover {
+            background: #1f2937;
+        }
+
+        #notesResult {
+            margin-top: 12px;
+        }
+
+        @media (max-width: 700px) {
+            .container {
+                padding: 14px;
+            }
+
+            header {
+                padding: 18px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <h1>Case {{ record.id }}</h1>
+    <p>Threat intelligence case details</p>
+</header>
+
+<div class="container">
+
+    <a class="back-link" href="/dashboard">
+        ← Back to Dashboard
+    </a>
+
+    <div class="card">
+        <h2>Case Information</h2>
+
+        <div class="row">
+            <span class="label">Platform:</span>
+            {{ record.platform }}
+        </div>
+
+        <div class="row">
+            <span class="label">Username:</span>
+            {{ record.username }}
+        </div>
+
+        <div class="row">
+            <span class="label">Display Name:</span>
+            {{ record.display_name or "Not provided" }}
+        </div>
+
+        <div class="row">
+            <span class="label">Public Location:</span>
+            {{ record.public_location or "Not provided" }}
+        </div>
+
+        <div class="row">
+            <span class="label">Language:</span>
+            {{ record.language }}
+        </div>
+
+        <div class="row">
+            <span class="label">UK Relevant:</span>
+            {{ record.uk_relevant }}
+        </div>
+
+        <div class="row">
+            <span class="label">Created:</span>
+            {{ record.created_at }}
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Original Text</h2>
+
+        <p>
+            {{ record.original_text }}
+        </p>
+
+        <h2>Translated Text</h2>
+
+        <p>
+            {{ record.translated_text or "No translation available" }}
+        </p>
+
+        <div class="row">
+            <span class="label">Translation Status:</span>
+            {{ record.translation_status }}
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Risk Assessment</h2>
+
+        <div class="row">
+            <span class="label">Severity:</span>
+            {{ record.severity }}
+        </div>
+
+        <div class="row">
+            <span class="label">Risk Score:</span>
+
+            <span class="risk-{{ record.risk_level }}">
+                {{ record.risk_score }}
+            </span>
+        </div>
+
+        <div class="row">
+            <span class="label">Risk Level:</span>
+            {{ record.risk_level }}
+        </div>
+
+        <div class="row">
+            <span class="label">Human Review Required:</span>
+            {{ record.human_review_required }}
+        </div>
+
+        <div class="row">
+            <span class="label">Detected Terms:</span>
+            {{ record.detected_terms | join(", ") if record.detected_terms else "None" }}
+        </div>
+
+        <div class="row">
+            <span class="label">Risk Indicators:</span>
+            {{ record.risk_indicators | join(", ") if record.risk_indicators else "None" }}
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Case Status</h2>
+
+        <select
+            onchange="updateStatus({{ record.id }}, this.value)"
+        >
+            <option
+                value="NEW"
+                {% if record.case_status == "NEW" %}selected{% endif %}
+            >
+                NEW
+            </option>
+
+            <option
+                value="UNDER_REVIEW"
+                {% if record.case_status == "UNDER_REVIEW" %}selected{% endif %}
+            >
+                UNDER_REVIEW
+            </option>
+
+            <option
+                value="MONITORING"
+                {% if record.case_status == "MONITORING" %}selected{% endif %}
+            >
+                MONITORING
+            </option>
+
+            <option
+                value="ESCALATED"
+                {% if record.case_status == "ESCALATED" %}selected{% endif %}
+            >
+                ESCALATED
+            </option>
+
+            <option
+                value="CLOSED"
+                {% if record.case_status == "CLOSED" %}selected{% endif %}
+            >
+                CLOSED
+            </option>
+
+            <option
+                value="FALSE_POSITIVE"
+                {% if record.case_status == "FALSE_POSITIVE" %}selected{% endif %}
+            >
+                FALSE_POSITIVE
+            </option>
+        </select>
+    </div>
+
+    <div class="card">
+        <h2>Analyst Notes</h2>
+
+        <textarea
+            id="analystNotes"
+            rows="6"
+            placeholder="Enter analyst review notes here..."
+        >{{ record.analyst_notes or "" }}</textarea>
+
+        <br><br>
+
+        <button
+            type="button"
+            onclick="saveAnalystNotes({{ record.id }})"
+        >
+            Save Notes
+        </button>
+
+        <div id="notesResult"></div>
+    </div>
+
+    <div class="card">
+        <h2>Analyst Note History</h2>
+
+        {% if note_history %}
+
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Previous Notes</th>
+                            <th>New Notes</th>
+                            <th>Changed At</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for item in note_history %}
+                        <tr>
+                            <td>{{ item.old_notes }}</td>
+                            <td>{{ item.new_notes }}</td>
+                            <td>{{ item.changed_at }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+        {% else %}
+
+            <p>No analyst note changes recorded yet.</p>
+
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h2>Status History</h2>
+
+        {% if status_history %}
+
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Previous Status</th>
+                            <th>New Status</th>
+                            <th>Changed At</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for item in status_history %}
+                        <tr>
+                            <td>{{ item.old_status }}</td>
+                            <td>{{ item.new_status }}</td>
+                            <td>{{ item.changed_at }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+        {% else %}
+
+            <p>No status changes recorded yet.</p>
+
+        {% endif %}
+    </div>
+
+</div>
+
+<script>
+async function updateStatus(recordId, newStatus) {
+    try {
+        const response = await fetch(
+            `/records/${recordId}/status`,
+            {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    case_status: newStatus
+                })
+            }
+        );
+
+        const result = await response.json();
+
+        if (result.success) {
+            alert("Case status updated.");
+            window.location.reload();
+        } else {
+            alert(
+                "Update failed: " +
+                (result.message || "Unknown error")
+            );
+        }
+
+    } catch (error) {
+        console.error(error);
+        alert("Unable to update case status.");
+    }
+}
+
+
+async function saveAnalystNotes(recordId) {
+    const notes =
+        document.getElementById(
+            "analystNotes"
+        ).value.trim();
+
+    const resultBox =
+        document.getElementById(
+            "notesResult"
+        );
+
+    try {
+        const response = await fetch(
+            `/records/${recordId}/notes`,
+            {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    analyst_notes: notes
+                })
+            }
+        );
+
+        const result =
+            await response.json();
+
+        if (result.success) {
+            resultBox.innerHTML =
+                "<strong>Notes saved successfully.</strong>";
+
+            setTimeout(function () {
+                window.location.reload();
+            }, 1200);
+
+        } else {
+            resultBox.innerHTML =
+                "<strong>Unable to save notes.</strong>";
+        }
+
+    } catch (error) {
+        console.error(error);
+
+        resultBox.innerHTML =
+            "<strong>Error saving notes.</strong>";
+    }
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,19 @@
+INFO:     127.0.0.1:49181 - "GET / HTTP/1.1" 303 See Other
+INFO:     127.0.0.1:52011 - "GET / HTTP/1.1" 303 See Other
+INFO:     127.0.0.1:52011 - "GET /login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52011 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:62810 - "POST /login HTTP/1.1" 303 See Other
+INFO:     127.0.0.1:62810 - "GET /dashboard HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56241 - "POST /evidence HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56241 - "GET /dashboard HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59140 - "POST /evidence HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59140 - "GET /dashboard HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49993 - "GET /dashboard HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63830 - "GET /dashboard HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63830 - "GET /dashboard HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56802 - "GET / HTTP/1.1" 303 See Other
+INFO:     127.0.0.1:56802 - "GET /dashboard HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59237 - "GET /dashboard HTTP/1.1" 303 See Other
+INFO:     127.0.0.1:59237 - "GET /login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59237 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58827 - "GET /login HTTP/1.1" 200 OK

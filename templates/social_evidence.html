@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Social Evidence | UK Social Threat Intelligence Monitor</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f4f7fb;
+            color: #1f2937;
+        }
+
+        .topbar {
+            background: #0b1f3a;
+            color: white;
+            padding: 18px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .topbar h1 {
+            margin: 0;
+            font-size: 21px;
+        }
+
+        .topbar a {
+            color: white;
+            text-decoration: none;
+            margin-left: 18px;
+            font-size: 14px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .page-title {
+            margin-bottom: 25px;
+        }
+
+        .page-title h2 {
+            margin-bottom: 8px;
+            color: #0b1f3a;
+        }
+
+        .page-title p {
+            color: #5b6573;
+            margin-top: 0;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .card h3 {
+            margin-top: 0;
+            color: #0b1f3a;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 7px;
+        }
+
+        input,
+        select,
+        textarea {
+            width: 100%;
+            padding: 11px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 14px;
+            background: white;
+        }
+
+        textarea {
+            min-height: 140px;
+            resize: vertical;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+        }
+
+        .help {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 5px;
+        }
+
+        .button-row {
+            margin-top: 22px;
+            display: flex;
+            gap: 12px;
+        }
+
+        button {
+            border: none;
+            border-radius: 6px;
+            padding: 12px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .primary {
+            background: #0b1f3a;
+            color: white;
+        }
+
+        .primary:hover {
+            background: #163b68;
+        }
+
+        .secondary {
+            background: #e5e7eb;
+            color: #1f2937;
+        }
+
+        .notice {
+            background: #eef6ff;
+            border-left: 4px solid #2563eb;
+            padding: 14px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .required {
+            color: #b91c1c;
+        }
+
+        /* Evidence Register */
+
+        .table-wrapper {
+            overflow-x: auto;
+        }
+
+        .evidence-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 950px;
+        }
+
+        .evidence-table th,
+        .evidence-table td {
+            padding: 12px 10px;
+            border-bottom: 1px solid #e5e7eb;
+            text-align: left;
+            vertical-align: middle;
+            font-size: 13px;
+        }
+
+        .evidence-table th {
+            background: #f8fafc;
+            color: #475467;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+
+        .evidence-id {
+            font-family: Consolas, monospace;
+            font-size: 12px;
+            font-weight: bold;
+            color: #0b1f3a;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 5px 9px;
+            border-radius: 14px;
+            background: #e8eef7;
+            color: #0b1f3a;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .source-link {
+            color: #0756a3;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .source-link:hover {
+            text-decoration: underline;
+        }
+
+        .view-btn {
+            display: inline-block;
+            background: #0b1f3a;
+            color: white;
+            padding: 7px 12px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .view-btn:hover {
+            background: #163b68;
+        }
+
+        .empty-records {
+            padding: 20px;
+            text-align: center;
+            color: #6b7280;
+        }
+
+        @media (max-width: 750px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .full-width {
+                grid-column: auto;
+            }
+
+            .topbar {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .topbar a {
+                margin-left: 0;
+                margin-right: 15px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="topbar">
+
+    <h1>UK Social Threat Intelligence Monitor</h1>
+
+    <div>
+        <a href="/dashboard">Dashboard</a>
+        <a href="/profile">Personal Details</a>
+        <a href="/settings">Settings</a>
+        <a href="/logout">Logout</a>
+    </div>
+
+</div>
+
+
+<div class="container">
+
+    <div class="page-title">
+        <h2>Social Evidence Intake</h2>
+
+        <p>
+            Record publicly available or lawfully obtained information
+            for authorised intelligence analysis and human review.
+        </p>
+    </div>
+
+
+    <div class="notice">
+        <strong>Evidence handling:</strong>
+        Record only information that the analyst is authorised to collect.
+        Do not enter private passwords, private account information,
+        hidden addresses, or other information obtained through unauthorised access.
+        Information entered here should be treated as an evidence record,
+        not as an automatic determination that a person presents a threat.
+    </div>
+
+
+    <!-- CREATE EVIDENCE -->
+
+    <div class="card">
+
+        <h3>Create Evidence Record</h3>
+
+        <form method="post" action="/social-evidence">
+
+            <div class="form-grid">
+
+                <div>
+                    <label for="platform">
+                        Platform <span class="required">*</span>
+                    </label>
+
+                    <select id="platform" name="platform" required>
+                        <option value="">Select platform</option>
+                        <option value="Facebook">Facebook</option>
+                        <option value="X">X</option>
+                        <option value="Instagram">Instagram</option>
+                        <option value="TikTok">TikTok</option>
+                        <option value="YouTube">YouTube</option>
+                        <option value="LinkedIn">LinkedIn</option>
+                        <option value="Clubhouse">Clubhouse</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+
+
+                <div>
+                    <label for="evidence_type">
+                        Evidence Type <span class="required">*</span>
+                    </label>
+
+                    <select id="evidence_type" name="evidence_type" required>
+                        <option value="">Select evidence type</option>
+                        <option value="POST">Post</option>
+                        <option value="COMMENT">Comment</option>
+                        <option value="PROFILE">Public Profile</option>
+                        <option value="IMAGE">Image</option>
+                        <option value="VIDEO">Video</option>
+                        <option value="AUDIO">Audio</option>
+                        <option value="SCREENSHOT">Screenshot</option>
+                        <option value="OTHER">Other</option>
+                    </select>
+                </div>
+
+
+                <div class="full-width">
+                    <label for="source_url">
+                        Public Source URL <span class="required">*</span>
+                    </label>
+
+                    <input
+                        type="url"
+                        id="source_url"
+                        name="source_url"
+                        placeholder="https://..."
+                        required
+                    >
+
+                    <div class="help">
+                        Enter the publicly accessible source URL where the
+                        evidence was observed.
+                    </div>
+                </div>
+
+
+                <div>
+                    <label for="public_username">
+                        Public Username
+                    </label>
+
+                    <input
+                        type="text"
+                        id="public_username"
+                        name="public_username"
+                        placeholder="Publicly displayed username"
+                    >
+                </div>
+
+
+                <div>
+                    <label for="public_profile_url">
+                        Public Profile URL
+                    </label>
+
+                    <input
+                        type="url"
+                        id="public_profile_url"
+                        name="public_profile_url"
+                        placeholder="https://..."
+                    >
+                </div>
+
+
+                <div>
+                    <label for="observed_at">
+                        Date/Time Observed
+                    </label>
+
+                    <input
+                        type="datetime-local"
+                        id="observed_at"
+                        name="observed_at"
+                    >
+                </div>
+
+
+                <div>
+                    <label for="public_location">
+                        Publicly Disclosed Location
+                    </label>
+
+                    <input
+                        type="text"
+                        id="public_location"
+                        name="public_location"
+                        placeholder="Only information publicly disclosed"
+                    >
+
+                    <div class="help">
+                        Do not enter a private or hidden residential address.
+                    </div>
+                </div>
+
+
+                <div>
+                    <label for="case_id">
+                        Case ID
+                    </label>
+
+                    <input
+                        type="text"
+                        id="case_id"
+                        name="case_id"
+                        placeholder="Existing case reference, if applicable"
+                    >
+                </div>
+
+
+                <div class="full-width">
+                    <label for="post_text">
+                        Post / Content Text
+                    </label>
+
+                    <textarea
+                        id="post_text"
+                        name="post_text"
+                        placeholder="Paste the relevant publicly available content here..."
+                    ></textarea>
+                </div>
+
+
+                <div class="full-width">
+                    <label for="analyst_notes">
+                        Analyst Notes
+                    </label>
+
+                    <textarea
+                        id="analyst_notes"
+                        name="analyst_notes"
+                        placeholder="Record objective observations, source context and review notes..."
+                    ></textarea>
+                </div>
+
+            </div>
+
+
+            <div class="button-row">
+
+                <button type="submit" class="primary">
+                    Create Evidence Record
+                </button>
+
+                <button type="reset" class="secondary">
+                    Clear Form
+                </button>
+
+            </div>
+
+        </form>
+
+    </div>
+
+
+    <!-- SOCIAL EVIDENCE REGISTER -->
+
+    <div class="card">
+
+        <h3>Social Evidence Register</h3>
+
+        <div class="table-wrapper">
+
+            {% if evidence_records %}
+
+            <table class="evidence-table">
+
+                <thead>
+                    <tr>
+                        <th>Evidence ID</th>
+                        <th>Platform</th>
+                        <th>Username</th>
+                        <th>Type</th>
+                        <th>Case ID</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Source</th>
+                        <th>Evidence Record</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                    {% for evidence in evidence_records %}
+
+                    <tr>
+
+                        <td class="evidence-id">
+                            {{ evidence["evidence_id"] }}
+                        </td>
+
+                        <td>
+                            {{ evidence["platform"] or "-" }}
+                        </td>
+
+                        <td>
+                            {{ evidence["public_username"] or "-" }}
+                        </td>
+
+                        <td>
+                            {{ evidence["evidence_type"] or "-" }}
+                        </td>
+
+                        <td>
+                            {{ evidence["case_id"] or "-" }}
+                        </td>
+
+                        <td>
+                            <span class="status">
+                                {{ evidence["status"] or "NEW" }}
+                            </span>
+                        </td>
+
+                        <td>
+                            {{ evidence["created_at"] or "-" }}
+                        </td>
+
+                        <td>
+
+                            {% if evidence["source_url"] %}
+
+                            <a
+                                href="{{ evidence['source_url'] }}"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="source-link"
+                            >
+                                Open
+                            </a>
+
+                            {% else %}
+
+                            -
+
+                            {% endif %}
+
+                        </td>
+
+                        <td>
+
+                            <a
+                                href="/social-evidence/{{ evidence['evidence_id'] }}"
+                                class="view-btn"
+                            >
+                                View Evidence
+                            </a>
+
+                        </td>
+
+                    </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+            {% else %}
+
+            <div class="empty-records">
+                No social evidence records have been created yet.
+            </div>
+
+            {% endif %}
+
+        </div>
+
+    </div>
+
+</div>
+
+</body>
+</html>
